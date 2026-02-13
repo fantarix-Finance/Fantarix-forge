@@ -101,7 +101,7 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ va
             return null;
         }
 
-        return { value: latestYield, change };
+        return { value: latestYield, change, date: latestData.date };
 
     } catch (error) {
         console.error(`[Alpha Vantage] Error fetching ${maturity} treasury yield:`, error);
@@ -133,8 +133,10 @@ export async function getAllTreasuryYields() {
     const result = {
         '10year': tenYearData ? tenYearData.value : null,
         '10yearChange': tenYearData ? tenYearData.change : 0,
+        '10yearDate': tenYearData ? tenYearData.date : null,
         '30year': thirtyYearData ? thirtyYearData.value : null,
-        '30yearChange': thirtyYearData ? thirtyYearData.change : 0
+        '30yearChange': thirtyYearData ? thirtyYearData.change : 0,
+        '30yearDate': thirtyYearData ? thirtyYearData.date : null
     };
 
     console.log('[Alpha Vantage] getAllTreasuryYields: Final result:', result);

@@ -74,11 +74,13 @@ export async function GET(request: Request) {
                 if (item.isTreasuryYield) {
                     const maturityKey = (item as any).maturity as '10year' | '30year';
                     const changeKey = maturityKey === '10year' ? '10yearChange' : '30yearChange';
+                    const dateKey = maturityKey === '10year' ? '10yearDate' : '30yearDate';
 
                     const yieldValue = treasuryYields ? treasuryYields[maturityKey] : null;
                     const changeValue = treasuryYields ? treasuryYields[changeKey] : 0;
+                    const dateValue = treasuryYields ? treasuryYields[dateKey] : null;
 
-                    console.log(`[Treasury] ${item.name}: maturity=${maturityKey}, value=${yieldValue}, change=${changeValue}`);
+                    console.log(`[Treasury] ${item.name}: maturity=${maturityKey}, value=${yieldValue}, change=${changeValue}, date=${dateValue}`);
 
                     if (yieldValue !== null && yieldValue !== undefined) {
                         results.push({
@@ -88,8 +90,9 @@ export async function GET(request: Request) {
                             price: yieldValue,  // Yield as percentage (e.g., 4.21)
                             change: changeValue, // Daily change (e.g. +0.05)
                             isPositive: true,
-                            timestamp: new Date().toISOString(),
-                            marketState: 'REGULAR',
+                            // Use actual data date if available, otherwise current time
+                            timestamp: dateValue ? new Date(dateValue).toISOString() : new Date().toISOString(),
+                            marketState: 'CLOSED', // It's daily data, so effectively closed/EOD
                             isTreasuryYield: true,
                         });
                     } else {
