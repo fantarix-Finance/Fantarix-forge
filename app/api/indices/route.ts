@@ -3,7 +3,10 @@ import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 import { getFinnhubQuote } from '@/lib/finnhub-api';
 
 // Force dynamic rendering to handle external API rate limits and timeouts
-export const dynamic = 'force-dynamic';
+// Force static generation and CACHE EVERYTHING to prevent dynamic usage errors
+export const dynamic = 'force-static';
+export const fetchCache = 'force-cache';
+export const revalidate = 3600;
 
 // Symbol mapping: Yahoo Finance symbols → Finnhub symbols (ETFs)
 const SYMBOL_MAP: Record<string, string> = {
@@ -29,8 +32,7 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
     // Others use ETF price as-is
 };
 
-// Force dynamic behavior by accepting the Request object
-export async function GET(request: Request) {
+export async function GET() {
 
     const definitions = [
         // Indices (converted from ETF prices to index values)
