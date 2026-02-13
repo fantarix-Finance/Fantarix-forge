@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 import { getFinnhubQuote } from '@/lib/finnhub-api';
 
-// Force dynamic rendering to handle external API rate limits and timeouts
-export const dynamic = 'force-dynamic';
+// Force static generation with ISR to prevent dynamic usage errors
+export const dynamic = 'force-static';
+export const revalidate = 3600;
 
 // Symbol mapping: Yahoo Finance symbols → Finnhub symbols (ETFs)
 const SYMBOL_MAP: Record<string, string> = {

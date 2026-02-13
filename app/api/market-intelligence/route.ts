@@ -266,12 +266,21 @@ ${stocksSummary}
 
 이 섹터가 현재 52주 저점 근처에 있는 이유와 투자 기회로서의 가치를 간결하게 설명해주세요. 한국어로 100자 이내로 작성하세요.`;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        return response.text();
+        try {
+            const result = await model.generateContent(prompt);
+            const response = result.response;
+            return response.text();
+        } catch (error: any) {
+            // Check for quota exceeded or rate limit errors
+            if (error.message?.includes('429') || error.message?.includes('Quota exceeded') || error.status === 429) {
+                console.warn(`[Market Intelligence] Gemini Quota Exceeded for ${sector.sectorKo}. Returning fallback.`);
+                return "현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)";
+            }
+            throw error;
+        }
 
     } catch (error: any) {
         console.error('[Market Intelligence] AI analysis error:', error);
-        throw error;
+        return "AI 분석 중 오류가 발생했습니다.";
     }
 }
