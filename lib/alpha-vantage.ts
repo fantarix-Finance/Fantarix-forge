@@ -40,7 +40,6 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<numb
 
         // Enable caching (1 hour) to support ISR and avoid rate limits/timeouts
         const response = await fetch(url, {
-            cache: 'force-cache',
             next: { revalidate: 3600 }
         });
 
@@ -150,7 +149,6 @@ export async function getStockOverview(symbol: string): Promise<StockOverview | 
     try {
         const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`;
         const response = await fetch(url, {
-            cache: 'force-cache',
             next: { revalidate: 3600 }
         });
 

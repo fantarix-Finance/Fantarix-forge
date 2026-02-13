@@ -29,7 +29,8 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
     // Others use ETF price as-is
 };
 
-export async function GET() {
+// Force dynamic behavior by accepting the Request object
+export async function GET(request: Request) {
 
     const definitions = [
         // Indices (converted from ETF prices to index values)
