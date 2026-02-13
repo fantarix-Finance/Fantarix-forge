@@ -1,4 +1,4 @@
-import { openrouter } from '@openrouter/ai-sdk-provider'; // Example provider, usually openai
+// import { openrouter } from '@openrouter/ai-sdk-provider'; // Example provider, usually openai
 import { streamText } from 'ai';
 
 // We need an API key for the AI model. 
@@ -9,26 +9,26 @@ import { streamText } from 'ai';
 export const runtime = 'edge';
 
 export async function POST(req: Request) {
-    const { messages } = await req.json();
+  const { messages } = await req.json();
 
-    // SIMULATION MODE (Mock Response)
-    // Since we don't have an OpenAI key from the user yet, we simulate a streaming response
-    // to interpret the market data.
+  // SIMULATION MODE (Mock Response)
+  // Since we don't have an OpenAI key from the user yet, we simulate a streaming response
+  // to interpret the market data.
 
-    /* 
-    // Real implementation:
-    const result = streamText({
-      model: openai('gpt-4o'),
-      messages,
-    });
-    return result.toDataStreamResponse();
-    */
+  /* 
+  // Real implementation:
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+  });
+  return result.toDataStreamResponse();
+  */
 
-    // Mock Implementation for correct UI testing without billing:
-    const lastMessage = messages[messages.length - 1].content;
+  // Mock Implementation for correct UI testing without billing:
+  const lastMessage = messages[messages.length - 1].content;
 
-    // Simple "Sequential Thinking" simulation in the response Text
-    const mockResponse = `I'm analyzing the market sentiment based on your query: "${lastMessage}".
+  // Simple "Sequential Thinking" simulation in the response Text
+  const mockResponse = `I'm analyzing the market sentiment based on your query: "${lastMessage}".
   
 1. **Analyzing Trend**: The S&P 500 is currently showing strong momentum.
 2. **Checking News**: Major earnings reports are driving volatility.
@@ -36,6 +36,6 @@ export async function POST(req: Request) {
 
 (Note: This is a demo response. Add OPENAI_API_KEY to .env.local to enable real AI)`;
 
-    // Manually return a simple text response for now as setting up a real stream without a key is complex
-    return new Response(mockResponse);
+  // Manually return a simple text response for now as setting up a real stream without a key is complex
+  return new Response(mockResponse);
 }
