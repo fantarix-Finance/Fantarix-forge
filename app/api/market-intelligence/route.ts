@@ -271,12 +271,10 @@ ${stocksSummary}
             const response = result.response;
             return response.text();
         } catch (error: any) {
-            // Check for quota exceeded or rate limit errors
-            if (error.message?.includes('429') || error.message?.includes('Quota exceeded') || error.status === 429) {
-                console.warn(`[Market Intelligence] Gemini Quota Exceeded for ${sector.sectorKo}. Returning fallback.`);
-                return "현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)";
-            }
-            throw error;
+            console.warn(`[Market Intelligence] Gemini Analysis Failed for ${sector.sectorKo}:`, error.message || error);
+            // Return fallback for ANY error (Quota, Rate Limit, Server Error, etc.)
+            // This ensures the dashboard always loads even if AI is unstable.
+            return "현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)";
         }
 
     } catch (error: any) {
