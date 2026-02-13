@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import finnhub from 'finnhub';
 import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 
-// Smart caching: revalidate every 30 seconds for better performance
-export const revalidate = 30;
+// Force dynamic rendering to handle external API rate limits and timeouts
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // Initialize Finnhub client
 const api_key = finnhub.ApiClient.instance.authentications['api_key'];
@@ -151,7 +152,8 @@ export async function GET() {
                 });
 
                 // Rate limit protection (Finnhub: 60 calls/min, so 1 call/sec is safe)
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Increased delay to 300ms to be safer against 429s in production
+                await new Promise(resolve => setTimeout(resolve, 300));
             } catch (err: any) {
                 console.error(`Failed to fetch ${item.symbol}:`, err.message);
                 results.push({
