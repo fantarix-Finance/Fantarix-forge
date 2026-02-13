@@ -46,20 +46,20 @@ export async function GET(request: Request) {
         const changePercent = stockData.changePercent ?? 0;
 
         return NextResponse.json({
-            symbol: result.symbol,
-            ticker: result.ticker,
-            market: result.market,
-            name: result.name,
+            symbol: stockData.symbol,
+            ticker: stockData.ticker,
+            market: stockData.market,
+            name: stockData.name,
             currentPrice: currentPrice,
             previousClose: calculatePreviousClose(currentPrice, changePercent),
             change: calculateChange(currentPrice, changePercent),
             changePercent: changePercent,
-            dayHigh: result.high,
-            dayLow: result.low,
-            volume: result.volume,
-            marketCap: result.marketCap,
+            dayHigh: stockData.high,
+            dayLow: stockData.low,
+            volume: stockData.volume,
+            marketCap: stockData.marketCap,
             source: 'KRX',
-            date: result.date
+            date: stockData.date
         });
 
     } catch (error: any) {
