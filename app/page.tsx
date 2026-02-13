@@ -1,9 +1,4 @@
-import dynamic from 'next/dynamic';
-
-const MarketIndices = dynamic(() => import("@/components/MarketIndices").then(mod => mod.MarketIndices), {
-  ssr: false,
-  loading: () => <div className="animate-pulse bg-slate-800/50 h-64 rounded-xl"></div>
-});
+import { MarketIndicesWrapper } from "@/components/MarketIndicesWrapper";
 import { Portfolio } from "@/components/Portfolio";
 import { MarketNewsFeed } from "@/components/MarketNewsFeed";
 import { ChatWidget } from "@/components/ChatWidget";
@@ -35,7 +30,7 @@ export default function Home() {
 
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <MarketIndices />
+          <MarketIndicesWrapper />
           <Portfolio />
           <RiskMonitor />
           <OpportunityRadar />
