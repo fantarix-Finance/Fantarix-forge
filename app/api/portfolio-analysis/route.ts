@@ -10,9 +10,27 @@ export const revalidate = 28800; // Cache for 8 hours (consistent with other AI 
  * POST /api/portfolio-analysis
  * Body: { accounts: Account[], totalValue: number, totalInvested: number }
  */
+
+interface Holding {
+    id: string;
+    name: string;
+    qty: number;
+    avgCost: number;
+    currentPrice?: number;
+}
+
+interface Account {
+    name: string;
+    holdings: Holding[];
+}
+
 export async function POST(request: Request) {
     try {
-        const { accounts, totalValue, totalInvested } = await request.json();
+        const { accounts, totalValue, totalInvested } = await request.json() as {
+            accounts: Account[];
+            totalValue: number;
+            totalInvested: number;
+        };
 
         if (!accounts || !Array.isArray(accounts)) {
             return NextResponse.json({ error: 'Invalid portfolio data' }, { status: 400 });
