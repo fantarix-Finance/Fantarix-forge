@@ -271,7 +271,7 @@ ${stocksSummary}
             const response = result.response;
             return response.text();
         } catch (error: any) {
-            console.warn(`[Market Intelligence] Gemini Analysis Failed for ${sector.sectorKo}:`, error.message || error);
+            console.log(`[Market Intelligence] Gemini Analysis unavailable (Quota/Error) for ${sector.sectorKo}. Using fallback.`);
             // Return fallback for ANY error (Quota, Rate Limit, Server Error, etc.)
             // This ensures the dashboard always loads even if AI is unstable.
             return "현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)";
