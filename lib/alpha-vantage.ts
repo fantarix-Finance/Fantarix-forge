@@ -38,9 +38,9 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<numb
         const url = `https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=daily&maturity=${maturity}&apikey=${apiKey}`;
         console.log(`[Alpha Vantage] Fetching ${maturity} from URL (key hidden)`);
 
-        // REMOVED Next.js caching - it may cause issues in API routes
+        // Enable caching (1 hour) to support ISR and avoid rate limits/timeouts
         const response = await fetch(url, {
-            cache: 'no-store'  // Disable caching for now to debug
+            next: { revalidate: 3600 }
         });
 
         console.log(`[Alpha Vantage] ${maturity} response status: ${response.status}`);
@@ -149,7 +149,7 @@ export async function getStockOverview(symbol: string): Promise<StockOverview | 
     try {
         const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`;
         const response = await fetch(url, {
-            cache: 'no-store'
+            next: { revalidate: 3600 }
         });
 
         if (!response.ok) {
