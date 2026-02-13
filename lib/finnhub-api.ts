@@ -38,7 +38,9 @@ export async function getStockMetrics(symbol: string): Promise<FinnhubMetrics | 
 
     try {
         const url = `${FINNHUB_BASE_URL}/stock/metric?symbol=${symbol}&metric=all&token=${apiKey}`;
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            next: { revalidate: 3600 }
+        });
 
         if (!response.ok) {
             throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);
@@ -78,7 +80,9 @@ export async function getFinnhubQuote(symbol: string): Promise<FinnhubQuote | nu
 
     try {
         const url = `${FINNHUB_BASE_URL}/quote?symbol=${symbol}&token=${apiKey}`;
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            next: { revalidate: 3600 }
+        });
 
         if (!response.ok) {
             throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);

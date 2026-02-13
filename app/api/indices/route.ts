@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
-import finnhub from 'finnhub';
 import { getAllTreasuryYields } from '@/lib/alpha-vantage';
+import { getFinnhubQuote } from '@/lib/finnhub-api';
 
 // Force dynamic rendering to handle external API rate limits and timeouts
 export const dynamic = 'force-dynamic';
-
-// Initialize Finnhub client
-const api_key = finnhub.ApiClient.instance.authentications['api_key'];
-api_key.apiKey = process.env.FINNHUB_API_KEY || '';
-const finnhubClient = new finnhub.DefaultApi();
 
 // Symbol mapping: Yahoo Finance symbols → Finnhub symbols (ETFs)
 const SYMBOL_MAP: Record<string, string> = {
@@ -22,7 +17,7 @@ const SYMBOL_MAP: Record<string, string> = {
     'CL=F': 'USO',       // Oil ETF
     'BTC-USD': 'BITO',   // Bitcoin ETF
     'DX-Y.NYB': 'UUP',   // Dollar ETF
-    // Sectors는 그대로 사용
+    // Sectors use same symbols
 };
 
 // ETF-to-Index conversion multipliers
@@ -33,16 +28,6 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
     '^IXIC': 40,    // QQQ × 40 ≈ Nasdaq Composite (approximate)
     // Others use ETF price as-is
 };
-
-// Helper: Promise wrapper for Finnhub
-function getQuote(symbol: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-        finnhubClient.quote(symbol, (error: any, data: any, response: any) => {
-            if (error) reject(error);
-            else resolve(data);
-        });
-    });
-}
 
 export async function GET() {
 
@@ -58,11 +43,12 @@ export async function GET() {
         { symbol: '^TYX', name: '미국채 30년', category: 'index', isTreasuryYield: true, maturity: '30year' },
 
         // Macros
-        { symbol: 'GC=F', name: '금 ETF (GLD)', category: 'macro' },  // Clearer label
-        { symbol: 'CL=F', name: '원유 ETF (USO)', category: 'macro' },  // Clearer label
+        { symbol: 'GC=F', name: '금 ETF (GLD)', category: 'macro' },
+        { symbol: 'CL=F', name: '원유 ETF (USO)', category: 'macro' },
         { symbol: 'BTC-USD', name: '비트코인', category: 'macro' },
         { symbol: 'DX-Y.NYB', name: '달러인덱스', category: 'macro' },
-        // Sectors (기존 심볼 그대로)
+
+        // Sectors (use existing symbols)
         { symbol: 'XLK', name: '테크', category: 'sector' },
         { symbol: 'XLF', name: '금융', category: 'sector' },
         { symbol: 'XLV', name: '헬스케어', category: 'sector' },
@@ -87,7 +73,7 @@ export async function GET() {
                 // Handle Treasury Yields separately (from Alpha Vantage)
                 if (item.isTreasuryYield) {
                     const maturityKey = (item as any).maturity as '10year' | '30year';
-                    const yieldValue = treasuryYields[maturityKey];
+                    const yieldValue = treasuryYields ? treasuryYields[maturityKey] : null;
 
                     console.log(`[Treasury] ${item.name}: maturity=${maturityKey}, value=${yieldValue}`);
 
@@ -97,15 +83,14 @@ export async function GET() {
                             symbol: item.symbol,
                             category: item.category,
                             price: yieldValue,  // Yield as percentage (e.g., 4.21)
-                            change: 0,  // Alpha Vantage doesn't provide daily change easily
+                            change: 0,
                             isPositive: true,
                             timestamp: new Date().toISOString(),
                             marketState: 'REGULAR',
-                            isTreasuryYield: true,  // Flag for UI to display as percentage
+                            isTreasuryYield: true,
                         });
                     } else {
                         console.error(`[Treasury] ${item.name} FAILED: value=${yieldValue}`);
-                        // Fallback error if Alpha Vantage fails
                         results.push({
                             name: item.name,
                             symbol: item.symbol,
@@ -119,19 +104,20 @@ export async function GET() {
                             marketState: 'UNKNOWN',
                         });
                     }
-                    continue;  // Skip Finnhub processing for treasury yields
+                    continue;
                 }
 
                 // Handle regular Finnhub data (indices, commodities, sectors)
                 const finnhubSymbol = SYMBOL_MAP[item.symbol] || item.symbol;
-                const quote = await getQuote(finnhubSymbol);
+                const quote = await getFinnhubQuote(finnhubSymbol);
 
-                // Finnhub response structure:
-                // { c: current price, d: change, dp: percent change, h: high, l: low, o: open, pc: previous close, t: timestamp }
+                if (!quote) {
+                    throw new Error(`Failed to fetch quote for ${finnhubSymbol}`);
+                }
 
                 // Convert ETF price to index value if multiplier exists
                 const multiplier = INDEX_MULTIPLIERS[item.symbol] || 1;
-                const convertedPrice = (quote.c || 0) * multiplier;
+                const convertedPrice = (quote.currentPrice || 0) * multiplier;
 
                 // Round to 2 decimal places for indices
                 const displayPrice = Math.round(convertedPrice * 100) / 100;
@@ -141,18 +127,20 @@ export async function GET() {
                     symbol: item.symbol,
                     category: item.category,
                     price: displayPrice,
-                    change: quote.dp || 0,  // Percentage change stays the same
-                    isPositive: (quote.dp || 0) >= 0,
-                    timestamp: quote.t ? new Date(quote.t * 1000).toISOString() : new Date().toISOString(),
-                    marketState: 'REGULAR', // Finnhub doesn't provide market state
+                    change: quote.changePercent || 0,
+                    isPositive: (quote.changePercent || 0) >= 0,
+                    // Use timestamp from quote or current time
+                    timestamp: quote.timestamp ? new Date(quote.timestamp * 1000).toISOString() : new Date().toISOString(),
+                    marketState: 'REGULAR',
                     // Add metadata for UI to show "ETF 기반" label
                     isEstimated: multiplier > 1,
                     etfSymbol: multiplier > 1 ? finnhubSymbol : undefined
                 });
 
-                // Rate limit protection (Finnhub: 60 calls/min, so 1 call/sec is safe)
-                // Increased delay to 300ms to be safer against 429s in production
-                await new Promise(resolve => setTimeout(resolve, 300));
+                // Rate limit protection
+                // Even with caching, good to have a small delay if cache misses accumulate
+                await new Promise(resolve => setTimeout(resolve, 50));
+
             } catch (err: any) {
                 console.error(`Failed to fetch ${item.symbol}:`, err.message);
                 results.push({
