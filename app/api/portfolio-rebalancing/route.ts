@@ -8,9 +8,26 @@ export const dynamic = 'force-dynamic';
  * POST /api/portfolio-rebalancing
  * Body: { accounts: Account[], totalValue: number }
  */
+
+interface Holding {
+  id: string;
+  name: string;
+  qty: number;
+  avgCost: number;
+  currentPrice?: number;
+}
+
+interface Account {
+  name: string;
+  holdings: Holding[];
+}
+
 export async function POST(request: Request) {
   try {
-    const { accounts, totalValue } = await request.json();
+    const { accounts, totalValue } = await request.json() as {
+      accounts: Account[];
+      totalValue: number;
+    };
 
     if (!accounts || !Array.isArray(accounts)) {
       return NextResponse.json({ error: 'Invalid portfolio data' }, { status: 400 });
