@@ -4,7 +4,6 @@ import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 
 // Force dynamic rendering to handle external API rate limits and timeouts
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 // Initialize Finnhub client
 const api_key = finnhub.ApiClient.instance.authentications['api_key'];

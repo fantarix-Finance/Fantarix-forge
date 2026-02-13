@@ -4,8 +4,9 @@ import { calculate52WeekPosition } from '@/lib/fundamental-analysis';
 import { GICS_SECTORS, getAllGICSSectors } from '@/lib/sector-database';
 import { getFinnhubQuote, getStockMetrics } from '@/lib/finnhub-api';
 
-// Cache for 8 hours to reduce API usage
-export const revalidate = 28800; // 8 hours = 8 * 60 * 60 seconds
+// Configure for long-running process (due to rate limits)
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Attempt to extend timeout to 60s (pro/hobby limit varies)
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -158,8 +159,8 @@ export async function GET(request: Request) {
             const { sectorKey, data } = weakSector;
             const { sectorInfo, position52Week } = data;
 
-            // Get top 3 stocks for this sector
-            const topStocks = sectorInfo.stocks.slice(0, 3);
+            // Get top 2 stocks for this sector (reduced from 3 to save API calls/time)
+            const topStocks = sectorInfo.stocks.slice(0, 2);
             const stockOpportunities: StockOpportunity[] = [];
 
             for (let i = 0; i < topStocks.length; i++) {
