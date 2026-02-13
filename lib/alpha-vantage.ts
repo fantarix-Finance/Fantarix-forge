@@ -19,12 +19,12 @@ interface TreasuryYieldResponse {
 }
 
 /**
- * Get the latest Treasury Yield from Alpha Vantage
+ * Get the latest Treasury Yield and Change from Alpha Vantage
  * 
  * @param maturity - '10year' or '30year'
- * @returns Latest yield as a number (e.g., 4.21), or null if no data
+ * @returns Object with yield, change, and previousClose, or null if no data
  */
-export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<number | null> {
+export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ value: number; change: number } | null> {
     const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
 
     console.log(`[Alpha Vantage] Starting ${maturity} fetch, API key exists: ${!!apiKey}`);
@@ -51,14 +51,12 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<numb
         }
 
         const text = await response.text();
-        console.log(`[Alpha Vantage] ${maturity} response length: ${text.length} bytes`);
 
         let data: TreasuryYieldResponse;
         try {
             data = JSON.parse(text);
         } catch (e) {
             console.error(`[Alpha Vantage] ${maturity} JSON parse error:`, e);
-            console.error(`[Alpha Vantage] ${maturity} raw response:`, text.substring(0, 500));
             return null;
         }
 
@@ -71,21 +69,39 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<numb
         // Check if we got valid data
         if (!data.data || data.data.length === 0) {
             console.error(`[Alpha Vantage] ${maturity} no treasury yield data returned`);
-            console.error(`[Alpha Vantage] ${maturity} response keys:`, Object.keys(data));
             return null;
         }
 
-        // Return the most recent yield value
-        const latestYield = parseFloat(data.data[0].value);
+        // Get latest and previous data points
+        const latestData = data.data[0];
+        const previousData = data.data[1]; // The day before
 
-        console.log(`[Alpha Vantage] ${maturity} SUCCESS: ${latestYield}% (date: ${data.data[0].date})`);
+        const latestYield = parseFloat(latestData.value);
+        let change = 0;
+
+        if (previousData) {
+            const previousYield = parseFloat(previousData.value);
+            // Calculate point change (e.g. 4.25 - 4.20 = 0.05)
+            // For yields, change is usually displayed in basis points or raw diff, not percent change of the rate.
+            // But dashboard expects "change" and "changePercent"? 
+            // Usually for dashboard: 
+            // "Price" = 4.25
+            // "Change" = +0.05 (value diff)
+            // "ChangePercent" = (+0.05 / 4.20) * 100
+
+            if (!isNaN(previousYield) && previousYield !== 0) {
+                change = latestYield - previousYield;
+            }
+        }
+
+        console.log(`[Alpha Vantage] ${maturity} SUCCESS: ${latestYield}% (Change: ${change.toFixed(2)})`);
 
         if (isNaN(latestYield)) {
-            console.error(`[Alpha Vantage] ${maturity} invalid yield value:`, data.data[0].value);
+            console.error(`[Alpha Vantage] ${maturity} invalid yield value:`, latestData.value);
             return null;
         }
 
-        return latestYield;
+        return { value: latestYield, change };
 
     } catch (error) {
         console.error(`[Alpha Vantage] Error fetching ${maturity} treasury yield:`, error);
@@ -103,20 +119,22 @@ export async function getAllTreasuryYields() {
     console.log('[Alpha Vantage] getAllTreasuryYields: Starting sequential fetch');
 
     // Call 10-year first
-    const tenYear = await getTreasuryYield('10year');
-    console.log(`[Alpha Vantage] getAllTreasuryYields: 10-year result = ${tenYear}`);
+    const tenYearData = await getTreasuryYield('10year');
+    console.log(`[Alpha Vantage] getAllTreasuryYields: 10-year result = ${JSON.stringify(tenYearData)}`);
 
     // Wait 13 seconds to avoid rate limit (Alpha Vantage: 5 calls/minute = 12 sec minimum)
     console.log('[Alpha Vantage] getAllTreasuryYields: Waiting 13 seconds...');
     await new Promise(resolve => setTimeout(resolve, 13000));
 
     // Call 30-year second
-    const thirtyYear = await getTreasuryYield('30year');
-    console.log(`[Alpha Vantage] getAllTreasuryYields: 30-year result = ${thirtyYear}`);
+    const thirtyYearData = await getTreasuryYield('30year');
+    console.log(`[Alpha Vantage] getAllTreasuryYields: 30-year result = ${JSON.stringify(thirtyYearData)}`);
 
     const result = {
-        '10year': tenYear,
-        '30year': thirtyYear
+        '10year': tenYearData ? tenYearData.value : null,
+        '10yearChange': tenYearData ? tenYearData.change : 0,
+        '30year': thirtyYearData ? thirtyYearData.value : null,
+        '30yearChange': thirtyYearData ? thirtyYearData.change : 0
     };
 
     console.log('[Alpha Vantage] getAllTreasuryYields: Final result:', result);

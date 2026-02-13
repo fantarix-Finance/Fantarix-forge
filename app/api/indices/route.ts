@@ -73,9 +73,12 @@ export async function GET(request: Request) {
                 // Handle Treasury Yields separately (from Alpha Vantage)
                 if (item.isTreasuryYield) {
                     const maturityKey = (item as any).maturity as '10year' | '30year';
-                    const yieldValue = treasuryYields ? treasuryYields[maturityKey] : null;
+                    const changeKey = maturityKey === '10year' ? '10yearChange' : '30yearChange';
 
-                    console.log(`[Treasury] ${item.name}: maturity=${maturityKey}, value=${yieldValue}`);
+                    const yieldValue = treasuryYields ? treasuryYields[maturityKey] : null;
+                    const changeValue = treasuryYields ? treasuryYields[changeKey] : 0;
+
+                    console.log(`[Treasury] ${item.name}: maturity=${maturityKey}, value=${yieldValue}, change=${changeValue}`);
 
                     if (yieldValue !== null && yieldValue !== undefined) {
                         results.push({
@@ -83,7 +86,7 @@ export async function GET(request: Request) {
                             symbol: item.symbol,
                             category: item.category,
                             price: yieldValue,  // Yield as percentage (e.g., 4.21)
-                            change: 0,
+                            change: changeValue, // Daily change (e.g. +0.05)
                             isPositive: true,
                             timestamp: new Date().toISOString(),
                             marketState: 'REGULAR',
