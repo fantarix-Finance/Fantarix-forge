@@ -41,8 +41,9 @@ export async function GET(request: Request) {
         }
 
         // Return successful response
-        const currentPrice = result.currentPrice ?? 0;
-        const changePercent = result.changePercent ?? 0;
+        const stockData = result as any;
+        const currentPrice = stockData.currentPrice ?? 0;
+        const changePercent = stockData.changePercent ?? 0;
 
         return NextResponse.json({
             symbol: result.symbol,
