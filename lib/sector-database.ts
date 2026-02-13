@@ -37,13 +37,7 @@ export const KOREAN_ETF_DATABASE: Record<string, StockInfo> = {
         description: '미국 AI 소프트웨어 섹터 전반에 투자합니다.'
     },
 
-    // Semiconductor
-    '484330': {
-        ticker: 'KODEX 미국S&P소프트웨어TOP10',
-        name: 'KODEX 미국S&P소프트웨어TOP10',
-        sectors: ['SEMICONDUCTOR'],
-        description: '반도체 제조 및 장비 기업'
-    },
+
 
     // Nuclear & Energy
     '433250': {
@@ -61,13 +55,7 @@ export const KOREAN_ETF_DATABASE: Record<string, StockInfo> = {
         description: 'SpaceX 등 우주산업 관련'
     },
 
-    // Defense
-    '433250': {
-        ticker: 'TIGER 원자력 & 첨단방산',
-        name: 'TIGER 원자력 & 첨단방산',
-        sectors: ['DEFENSE', 'NUCLEAR'],
-        description: '방산 및 원자력 산업'
-    }
+
 };
 
 /**
