@@ -31,6 +31,21 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
     '^GSPC': 10,    // SPY × 10 ≈ S&P 500 Index
     '^DJI': 100,    // DIA × 100 ≈ Dow Jones Index
     '^IXIC': 40,    // QQQ × 40 ≈ Nasdaq Composite (approximate)
+    // Others use ETF price as-is
+};
+
+// Helper: Promise wrapper for Finnhub
+function getQuote(symbol: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+        finnhubClient.quote(symbol, (error: any, data: any, response: any) => {
+            if (error) reject(error);
+            else resolve(data);
+        });
+    });
+}
+
+export async function GET() {
+
     const definitions = [
         // Indices (converted from ETF prices to index values)
         { symbol: '^GSPC', name: 'S&P 500', category: 'index', isIndex: true },
@@ -67,7 +82,7 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
         // Fetch treasury yields from Alpha Vantage (in parallel)
         const treasuryYields = await getAllTreasuryYields();
 
-        for(const item of definitions) {
+        for (const item of definitions) {
             try {
                 // Handle Treasury Yields separately (from Alpha Vantage)
                 if (item.isTreasuryYield) {
@@ -156,7 +171,7 @@ const INDEX_MULTIPLIERS: Record<string, number> = {
 
         return NextResponse.json(results);
 
-    } catch(error: any) {
+    } catch (error: any) {
         console.error("Finnhub Global Error:", error);
         return NextResponse.json({
             error: 'Failed to fetch market data',
