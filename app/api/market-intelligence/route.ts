@@ -56,19 +56,24 @@ async function getStockData(symbol: string): Promise<{
         }
 
         // 2. Get 52-week data from Finnhub metrics
-        const metrics = await getStockMetrics(symbol);
-        if (!metrics) {
-            console.log(`[Market Intelligence] Failed to get metrics for ${symbol}`);
-            return null;
-        }
+        try {
+            const metrics = await getStockMetrics(symbol);
+            if (!metrics) {
+                console.log(`[Market Intelligence] Failed to get metrics for ${symbol}`);
+                return null;
+            }
 
-        return {
-            symbol,
-            price: quote.currentPrice,
-            name: symbol,  // Finnhub quote doesn't include name
-            fiftyTwoWeekHigh: metrics.fiftyTwoWeekHigh,
-            fiftyTwoWeekLow: metrics.fiftyTwoWeekLow
-        };
+            return {
+                symbol,
+                price: quote.currentPrice,
+                name: symbol,
+                fiftyTwoWeekHigh: metrics.fiftyTwoWeekHigh,
+                fiftyTwoWeekLow: metrics.fiftyTwoWeekLow
+            };
+        } catch (error: any) {
+            console.error(`[Market Intelligence] Error getting metrics for ${symbol}:`, error.message);
+            return null; // Fail gracefully for this specific stock
+        }
 
     } catch (error: any) {
         console.error(`[Market Intelligence] Error fetching ${symbol}:`, error.message);
