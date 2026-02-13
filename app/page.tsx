@@ -1,4 +1,9 @@
-import { MarketIndices } from "@/components/MarketIndices";
+import dynamic from 'next/dynamic';
+
+const MarketIndices = dynamic(() => import("@/components/MarketIndices").then(mod => mod.MarketIndices), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-slate-800/50 h-64 rounded-xl"></div>
+});
 import { Portfolio } from "@/components/Portfolio";
 import { MarketNewsFeed } from "@/components/MarketNewsFeed";
 import { ChatWidget } from "@/components/ChatWidget";
