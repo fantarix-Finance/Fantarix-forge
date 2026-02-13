@@ -3,7 +3,6 @@ import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 import { getFinnhubQuote } from '@/lib/finnhub-api';
 
 // Force dynamic rendering to handle external API rate limits and timeouts
-// Force dynamic rendering to handle external API rate limits and timeouts
 export const dynamic = 'force-dynamic';
 
 // Symbol mapping: Yahoo Finance symbols → Finnhub symbols (ETFs)
