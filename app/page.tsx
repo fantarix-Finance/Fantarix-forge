@@ -1,4 +1,4 @@
-import { MarketIndicesWrapper } from "@/components/MarketIndicesWrapper";
+import { MarketIndicesWrapper } from "@/components/MarketIndicesWrapper"; // Trigger redeploy
 import { Portfolio } from "@/components/Portfolio";
 import { MarketNewsFeed } from "@/components/MarketNewsFeed";
 import { ChatWidget } from "@/components/ChatWidget";
