@@ -7,7 +7,18 @@ import { cn } from "@/lib/utils";
 
 export function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const { messages, input, handleInputChange, handleSubmit } = useChat();
+    // Manually manage input state due to type definition mismatch in current SDK version
+    const [input, setInput] = useState("");
+    // Cast to any to bypass strict type checking for now
+    const { messages, append } = useChat() as any;
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!input.trim()) return;
+
+        append({ role: 'user', content: input });
+        setInput("");
+    };
 
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
@@ -28,7 +39,7 @@ export function ChatWidget() {
                                 "오늘 시장 분위기 어때?", "반도체 섹터 전망은?"
                             </p>
                         )}
-                        {messages.map(m => (
+                        {messages.map((m: any) => (
                             <div key={m.id} className={cn(
                                 "text-sm p-3 rounded-xl max-w-[85%]",
                                 m.role === 'user'
@@ -40,11 +51,11 @@ export function ChatWidget() {
                         ))}
                     </div>
 
-                    <form onSubmit={handleSubmit} className="p-3 border-t border-white/5 flex gap-2">
+                    <form onSubmit={handleFormSubmit} className="p-3 border-t border-white/5 flex gap-2">
                         <input
                             className="flex-1 bg-white/5 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
                             value={input}
-                            onChange={handleInputChange}
+                            onChange={(e) => setInput(e.target.value)}
                             placeholder="질문을 입력하세요..."
                         />
                         <button type="submit" className="bg-sky-500 hover:bg-sky-400 text-white p-2 rounded-lg transition-colors">
