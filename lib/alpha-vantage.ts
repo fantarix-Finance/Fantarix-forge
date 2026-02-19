@@ -24,7 +24,7 @@ interface TreasuryYieldResponse {
  * @param maturity - '10year' or '30year'
  * @returns Object with yield, change, and previousClose, or null if no data
  */
-export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ value: number; change: number } | null> {
+export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ value: number; change: number; date: string } | null> {
     const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
 
     console.log(`[Alpha Vantage] Starting ${maturity} fetch, API key exists: ${!!apiKey}`);
