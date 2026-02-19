@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { getAllTreasuryYields } from '@/lib/alpha-vantage';
 import { getFinnhubQuote } from '@/lib/finnhub-api';
 
-// Force dynamic rendering to handle external API rate limits and timeouts
-export const dynamic = 'force-dynamic';
+// ISR: revalidate every 5 minutes (instead of force-dynamic which bypasses cache entirely)
+// This allows Next.js to cache responses at the CDN/server level, drastically reducing
+// external API calls. Finnhub internal fetch also uses next: { revalidate: 3600 }.
+export const revalidate = 300; // 5 minutes
 
 // Symbol mapping: Yahoo Finance symbols → Finnhub symbols (ETFs)
 const SYMBOL_MAP: Record<string, string> = {
@@ -21,11 +23,14 @@ const SYMBOL_MAP: Record<string, string> = {
 };
 
 // ETF-to-Index conversion multipliers
-// These convert ETF prices to approximate index values
+// Basis: 2025-02 values
+//   SPY ≈ $560  →  S&P 500 ≈ 5,600  → ×10  ✅
+//   DIA ≈ $430  →  Dow Jones ≈ 43,000 → ×100 ✅
+//   QQQ ≈ $490  →  Nasdaq ≈ 19,600  → ×40  (±5% acceptable approximation)
 const INDEX_MULTIPLIERS: Record<string, number> = {
     '^GSPC': 10,    // SPY × 10 ≈ S&P 500 Index
     '^DJI': 100,    // DIA × 100 ≈ Dow Jones Index
-    '^IXIC': 40,    // QQQ × 40 ≈ Nasdaq Composite (approximate)
+    '^IXIC': 40,    // QQQ × 40 ≈ Nasdaq Composite (±5% approximation)
     // Others use ETF price as-is
 };
 
@@ -38,7 +43,7 @@ export async function GET(request: Request) {
         { symbol: '^DJI', name: '다우 존스', category: 'index', isIndex: true },
         { symbol: '^VIX', name: 'VIX', category: 'index' },
 
-        // Treasury Yields (fetched from Alpha Vantage)
+        // Treasury Yields (fetched from Alpha Vantage via memory-cached getAllTreasuryYields)
         { symbol: '^TNX', name: '미국채 10년', category: 'index', isTreasuryYield: true, maturity: '10year' },
         { symbol: '^TYX', name: '미국채 30년', category: 'index', isTreasuryYield: true, maturity: '30year' },
 
@@ -65,7 +70,8 @@ export async function GET(request: Request) {
     try {
         const results = [];
 
-        // Fetch treasury yields from Alpha Vantage (in parallel)
+        // Fetch treasury yields from Alpha Vantage (memory-cached, 1h TTL)
+        // First call takes ~13s; subsequent calls within 1 hour are instant.
         const treasuryYields = await getAllTreasuryYields();
 
         for (const item of definitions) {
@@ -142,10 +148,6 @@ export async function GET(request: Request) {
                     isEstimated: multiplier > 1,
                     etfSymbol: multiplier > 1 ? finnhubSymbol : undefined
                 });
-
-                // Rate limit protection
-                // Even with caching, good to have a small delay if cache misses accumulate
-                await new Promise(resolve => setTimeout(resolve, 50));
 
             } catch (err: any) {
                 console.error(`Failed to fetch ${item.symbol}:`, err.message);

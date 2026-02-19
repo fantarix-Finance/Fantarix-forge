@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const dynamic = 'force-dynamic';
+// Note: POST endpoints cannot use ISR. The 8-hour cache is managed client-side.
 
 /**
  * AI Portfolio Rebalancing Recommendations

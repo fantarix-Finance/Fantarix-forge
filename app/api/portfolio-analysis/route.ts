@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 28800; // Cache for 8 hours (consistent with other AI features)
+// Note: POST endpoints cannot use ISR (revalidate). The 8-hour AI cache is
+// managed client-side via the cacheExpiresAt field returned in the response.
 
 /**
  * AI Portfolio Analysis

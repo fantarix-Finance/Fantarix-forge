@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 28800; // Cache for 8 hours (consistent with market-intelligence)
+// ISR: 8-hour cache for AI analysis (Gemini quota: ~20/day on free tier)
+// Removed force-dynamic which was preventing Next.js from caching this route.
+export const revalidate = 28800;
 
 // Initialize Gemini with correct model identifier
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -74,14 +75,14 @@ async function fetchMarketData(): Promise<MarketData> {
     try {
         // Get VIX (Volatility Index)
         const vixRes = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=^VIX&token=${FINNHUB_API_KEY}`,
+            `https://finnhub.io/api/v1/quote?symbol=VXX&token=${FINNHUB_API_KEY}`,
             { next: { revalidate: 3600 } }
         );
         const vixData = await vixRes.json();
 
         // Get S&P 500
         const sp500Res = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=^GSPC&token=${FINNHUB_API_KEY}`,
+            `https://finnhub.io/api/v1/quote?symbol=SPY&token=${FINNHUB_API_KEY}`,
             { next: { revalidate: 3600 } }
         );
         const sp500Data = await sp500Res.json();

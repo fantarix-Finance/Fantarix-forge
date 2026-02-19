@@ -4,9 +4,34 @@ import { calculate52WeekPosition } from '@/lib/fundamental-analysis';
 import { GICS_SECTORS, getAllGICSSectors } from '@/lib/sector-database';
 import { getFinnhubQuote, getStockMetrics } from '@/lib/finnhub-api';
 
-// Configure for long-running process (due to rate limits)
-export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Attempt to extend timeout to 60s (pro/hobby limit varies)
+// ─── Caching Strategy ─────────────────────────────────────────────────────────
+// Market Intelligence fetches 11 sector ETFs + stocks from Finnhub, then gets
+// AI analysis. Sequential processing with 1s delays easily exceeds Vercel's
+// function timeout (10s Hobby, 60s Pro).
+//
+// Solution: Server-side in-memory cache (8h TTL).
+//   - Cache HIT  → instant response (< 1ms)
+//   - Cache MISS → parallel Finnhub fetches (~3-5s), then AI analysis
+//
+// Note: maxDuration only works on Vercel Pro/Enterprise plans.
+// On Hobby plan the hard limit is 10s, so we keep computation < 10s.
+
+const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+interface CacheEntry {
+    data: object;
+    fetchedAt: number;
+}
+
+let intelligenceCache: CacheEntry | null = null;
+
+function isCacheValid(): boolean {
+    if (!intelligenceCache) return false;
+    return Date.now() - intelligenceCache.fetchedAt < CACHE_TTL_MS;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const dynamic = 'force-dynamic'; // Required for memory cache pattern
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -48,32 +73,29 @@ async function getStockData(symbol: string): Promise<{
     fiftyTwoWeekLow: number;
 } | null> {
     try {
-        // 1. Get current price from Finnhub quote
-        const quote = await getFinnhubQuote(symbol);
+        // Fetch quote and metrics in PARALLEL (no delay needed at 60 calls/min)
+        const [quote, metrics] = await Promise.all([
+            getFinnhubQuote(symbol),
+            getStockMetrics(symbol),
+        ]);
+
         if (!quote) {
             console.log(`[Market Intelligence] Failed to get quote for ${symbol}`);
             return null;
         }
 
-        // 2. Get 52-week data from Finnhub metrics
-        try {
-            const metrics = await getStockMetrics(symbol);
-            if (!metrics) {
-                console.log(`[Market Intelligence] Failed to get metrics for ${symbol}`);
-                return null;
-            }
-
-            return {
-                symbol,
-                price: quote.currentPrice,
-                name: symbol,
-                fiftyTwoWeekHigh: metrics.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow: metrics.fiftyTwoWeekLow
-            };
-        } catch (error: any) {
-            console.error(`[Market Intelligence] Error getting metrics for ${symbol}:`, error.message);
-            return null; // Fail gracefully for this specific stock
+        if (!metrics) {
+            console.log(`[Market Intelligence] Failed to get metrics for ${symbol}`);
+            return null;
         }
+
+        return {
+            symbol,
+            price: quote.currentPrice,
+            name: symbol,
+            fiftyTwoWeekHigh: metrics.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: metrics.fiftyTwoWeekLow
+        };
 
     } catch (error: any) {
         console.error(`[Market Intelligence] Error fetching ${symbol}:`, error.message);
@@ -82,39 +104,29 @@ async function getStockData(symbol: string): Promise<{
 }
 
 /**
- * Market Intelligence API (Sector-Based)
- * Analyzes 11 GICS sectors using Finnhub, finds 3 weakest by 52-week position
+ * Market Intelligence API (Sector-Based, with memory cache)
+ * Analyzes 11 GICS sectors using Finnhub, finds 3 weakest by 52-week position.
+ * Results are cached 8 hours to stay within Vercel function timeout limits.
  */
 export async function GET(request: Request) {
+    // ── Return cached data if still valid ─────────────────────────────────────
+    if (isCacheValid()) {
+        console.log('[Market Intelligence] Cache HIT – returning cached data');
+        return NextResponse.json(intelligenceCache!.data);
+    }
+
+    // ── Cache MISS: run full analysis ─────────────────────────────────────────
     try {
-        console.log('[Market Intelligence] Starting sector analysis with Finnhub...');
+        console.log('[Market Intelligence] Cache MISS – starting parallel sector analysis...');
 
-        // Step 1: Analyze all 11 sector ETFs
         const sectorKeys = getAllGICSSectors();
-        const sectorAnalyses: Array<{
-            sectorKey: string;
-            position: number;
-            data: any;
-        }> = [];
 
-        for (let i = 0; i < sectorKeys.length; i++) {
-            const sectorKey = sectorKeys[i];
+        // Step 1: Fetch ALL sector ETFs in PARALLEL (was sequential with 1s delays)
+        const sectorPromises = sectorKeys.map(async (sectorKey) => {
             const sectorInfo = GICS_SECTORS[sectorKey];
-
-            // Rate limit protection - Finnhub: 60 calls/min = 1s delay is safe
-            if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-
             try {
-                console.log(`[Market Intelligence] Analyzing sector: ${sectorKey} (ETF: ${sectorInfo.etf})`);
-
                 const stockData = await getStockData(sectorInfo.etf);
-
-                if (!stockData) {
-                    console.log(`[Market Intelligence] Skipping ${sectorInfo.etf} - no data`);
-                    continue;
-                }
+                if (!stockData) return null;
 
                 const position52Week = calculate52WeekPosition(
                     stockData.price,
@@ -122,65 +134,47 @@ export async function GET(request: Request) {
                     stockData.fiftyTwoWeekLow
                 );
 
-                sectorAnalyses.push({
-                    sectorKey,
-                    position: position52Week.position,
-                    data: {
-                        sectorInfo,
-                        stockData,
-                        position52Week
-                    }
-                });
-
                 console.log(
                     `[Market Intelligence] ${sectorKey}: $${stockData.price.toFixed(2)}, ` +
                     `52W: $${stockData.fiftyTwoWeekLow.toFixed(2)}-$${stockData.fiftyTwoWeekHigh.toFixed(2)}, ` +
                     `position=${position52Week.position.toFixed(0)}%`
                 );
 
+                return { sectorKey, position: position52Week.position, data: { sectorInfo, stockData, position52Week } };
             } catch (error: any) {
                 console.error(`[Market Intelligence] Error analyzing sector ${sectorKey}:`, error.message);
+                return null;
             }
-        }
+        });
+
+        const rawResults = await Promise.all(sectorPromises);
+        const sectorAnalyses = rawResults.filter(Boolean) as Array<{
+            sectorKey: string; position: number; data: any;
+        }>;
 
         if (sectorAnalyses.length === 0) {
             throw new Error('No sector data could be fetched');
         }
 
-        // Step 2: Sort by position (lowest = weakest = best opportunity)
+        // Step 2: Sort by 52-week position (lowest = weakest = best opportunity)
         sectorAnalyses.sort((a, b) => a.position - b.position);
 
         // Step 3: Get top 3 weakest sectors
         const top3Weakest = sectorAnalyses.slice(0, 3);
-
         console.log(`[Market Intelligence] Top 3 weakest sectors:`,
             top3Weakest.map(s => `${s.sectorKey} (${(s.position * 100).toFixed(0)}%)`).join(', ')
         );
 
-        // Step 4: Fetch stocks for each of the 3 sectors
-        const opportunities: SectorOpportunity[] = [];
-
-        for (const weakSector of top3Weakest) {
-            const { sectorKey, data } = weakSector;
+        // Step 4: Fetch stocks for each of the 3 sectors in PARALLEL
+        const opportunityPromises = top3Weakest.map(async ({ sectorKey, data }) => {
             const { sectorInfo, position52Week } = data;
 
-            // Get top 2 stocks for this sector (reduced from 3 to save API calls/time)
+            // Fetch top 2 stocks per sector, also in parallel
             const topStocks = sectorInfo.stocks.slice(0, 2);
-            const stockOpportunities: StockOpportunity[] = [];
-
-            for (let i = 0; i < topStocks.length; i++) {
-                const ticker = topStocks[i];
-
-                // Rate limit - 1 second delay
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
+            const stockPromises = topStocks.map(async (ticker: string) => {
                 try {
                     const stockData = await getStockData(ticker);
-
-                    if (!stockData) {
-                        console.log(`[Market Intelligence] Skipping stock ${ticker} - no data`);
-                        continue;
-                    }
+                    if (!stockData) return null;
 
                     const stockPosition = calculate52WeekPosition(
                         stockData.price,
@@ -188,50 +182,63 @@ export async function GET(request: Request) {
                         stockData.fiftyTwoWeekLow
                     );
 
-                    stockOpportunities.push({
+                    console.log(`[Market Intelligence] ${ticker}: $${stockData.price.toFixed(2)}, position=${stockPosition.position.toFixed(0)}%`);
+
+                    return {
                         ticker,
                         name: stockData.name,
                         currentPrice: stockData.price,
                         position52Week: stockPosition
-                    });
-
-                    console.log(
-                        `[Market Intelligence] ${ticker}: $${stockData.price.toFixed(2)}, ` +
-                        `position=${stockPosition.position.toFixed(0)}%`
-                    );
-
+                    } as StockOpportunity;
                 } catch (error: any) {
                     console.error(`[Market Intelligence] Error fetching stock ${ticker}:`, error.message);
+                    return null;
                 }
-            }
+            });
 
-            opportunities.push({
+            const stockResults = await Promise.all(stockPromises);
+            const stockOpportunities = stockResults.filter(Boolean) as StockOpportunity[];
+
+            return {
                 sectorKey,
                 sectorEn: sectorInfo.sectorEn,
                 sectorKo: sectorInfo.sectorKo,
                 etf: sectorInfo.etf,
                 position52Week,
                 stocks: stockOpportunities
-            });
-        }
+            } as SectorOpportunity;
+        });
 
-        // Step 5: Get AI analysis for the 3 sectors
-        for (const opp of opportunities) {
+        const opportunities = await Promise.all(opportunityPromises);
+
+        // Step 5: AI analysis for the 3 sectors in PARALLEL
+        // (Gemini flash-latest: 60 RPM, so 3 concurrent requests is fine)
+        const aiPromises = opportunities.map(async (opp) => {
             try {
                 opp.aiAnalysis = await getSectorAIAnalysis(opp);
             } catch (error: any) {
                 console.error(`[Market Intelligence] AI analysis failed for ${opp.sectorKo}:`, error.message);
                 opp.aiAnalysis = 'AI 분석을 가져올 수 없습니다.';
             }
-        }
+            return opp;
+        });
 
-        return NextResponse.json({
+        const finalOpportunities = await Promise.all(aiPromises);
+
+        const responseData = {
             success: true,
             analyzedAt: new Date().toISOString(),
-            cacheExpiresAt: new Date(Date.now() + 28800 * 1000).toISOString(), // 8 hours from now
+            cacheExpiresAt: new Date(Date.now() + CACHE_TTL_MS).toISOString(),
             totalSectorsAnalyzed: sectorAnalyses.length,
-            weakestSectors: opportunities
-        });
+            weakestSectors: finalOpportunities,
+            cached: false,
+        };
+
+        // Store in memory cache
+        intelligenceCache = { data: responseData, fetchedAt: Date.now() };
+        console.log('[Market Intelligence] Analysis complete. Cache updated (8h TTL).');
+
+        return NextResponse.json(responseData);
 
     } catch (error: any) {
         console.error('[Market Intelligence] Error:', error);
@@ -271,14 +278,12 @@ ${stocksSummary}
             const response = result.response;
             return response.text();
         } catch (error: any) {
-            console.log(`[Market Intelligence] Gemini Analysis unavailable (Quota/Error) for ${sector.sectorKo}. Using fallback.`);
-            // Return fallback for ANY error (Quota, Rate Limit, Server Error, etc.)
-            // This ensures the dashboard always loads even if AI is unstable.
-            return "현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)";
+            console.log(`[Market Intelligence] Gemini unavailable for ${sector.sectorKo}: ${error.message}`);
+            return '현재 AI 분석 사용량이 많아 잠시 분석을 제공할 수 없습니다. (Quota Exceeded)';
         }
 
     } catch (error: any) {
         console.error('[Market Intelligence] AI analysis error:', error);
-        return "AI 분석 중 오류가 발생했습니다.";
+        return 'AI 분석 중 오류가 발생했습니다.';
     }
 }

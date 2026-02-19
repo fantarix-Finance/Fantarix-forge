@@ -2,6 +2,12 @@
  * Alpha Vantage API Client
  * 
  * Fetches Treasury Yield data and Stock Overview (52-week high/low) from Alpha Vantage API
+ * 
+ * **Caching Strategy**:
+ * - Server-side in-memory cache with 1-hour TTL
+ * - First request or cache-miss: real API call (sequential, 13s delay for rate limits)
+ * - Cache hits: instant response (< 1ms)
+ * - Alpha Vantage free plan: 25 calls/day, 5 calls/min (13s delay = safe margin)
  */
 
 export type TreasuryMaturity = '10year' | '30year';
@@ -17,6 +23,27 @@ interface TreasuryYieldResponse {
     unit: string;
     data: TreasuryYieldData[];
 }
+
+// ─── Server Memory Cache ──────────────────────────────────────────────────────
+const TREASURY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+interface TreasuryCacheEntry {
+    '10year': number | null;
+    '10yearChange': number;
+    '10yearDate': string | null;
+    '30year': number | null;
+    '30yearChange': number;
+    '30yearDate': string | null;
+    fetchedAt: number;
+}
+
+let treasuryCache: TreasuryCacheEntry | null = null;
+
+function isCacheValid(): boolean {
+    if (!treasuryCache) return false;
+    return Date.now() - treasuryCache.fetchedAt < TREASURY_CACHE_TTL_MS;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Get the latest Treasury Yield and Change from Alpha Vantage
@@ -81,14 +108,6 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ va
 
         if (previousData) {
             const previousYield = parseFloat(previousData.value);
-            // Calculate point change (e.g. 4.25 - 4.20 = 0.05)
-            // For yields, change is usually displayed in basis points or raw diff, not percent change of the rate.
-            // But dashboard expects "change" and "changePercent"? 
-            // Usually for dashboard: 
-            // "Price" = 4.25
-            // "Change" = +0.05 (value diff)
-            // "ChangePercent" = (+0.05 / 4.20) * 100
-
             if (!isNaN(previousYield) && previousYield !== 0) {
                 change = latestYield - previousYield;
             }
@@ -110,36 +129,59 @@ export async function getTreasuryYield(maturity: TreasuryMaturity): Promise<{ va
 }
 
 /**
- * Get both 10-year and 30-year treasury yields
- * Calls sequentially with delay to avoid rate limiting
- * 
- * @returns Object with both yields, or null for failed fetches
+ * Get both 10-year and 30-year treasury yields.
+ *
+ * Uses server-side memory cache (1h TTL) to avoid the 13-second sequential
+ * delay on every request. Only fetches from Alpha Vantage on cache miss.
+ *
+ * If Alpha Vantage returns null for ALL values (rate limit), the result is
+ * cached for only 5 minutes so the next request retries sooner.
+ *
+ * @returns Object with both yields, or null values for failed fetches
  */
 export async function getAllTreasuryYields() {
-    console.log('[Alpha Vantage] getAllTreasuryYields: Starting sequential fetch');
+    // ── Cache HIT: return immediately ─────────────────────────────────────────
+    if (isCacheValid()) {
+        console.log('[Alpha Vantage] getAllTreasuryYields: Cache HIT, returning cached data');
+        return treasuryCache!;
+    }
 
-    // Call 10-year first
+    // ── Cache MISS: fetch from Alpha Vantage ──────────────────────────────────
+    console.log('[Alpha Vantage] getAllTreasuryYields: Cache MISS - starting sequential fetch');
+
     const tenYearData = await getTreasuryYield('10year');
-    console.log(`[Alpha Vantage] getAllTreasuryYields: 10-year result = ${JSON.stringify(tenYearData)}`);
+    console.log(`[Alpha Vantage] 10-year result = ${JSON.stringify(tenYearData)}`);
 
-    // Wait 13 seconds to avoid rate limit (Alpha Vantage: 5 calls/minute = 12 sec minimum)
-    console.log('[Alpha Vantage] getAllTreasuryYields: Waiting 13 seconds...');
+    // Wait 13 seconds to respect rate limit (Alpha Vantage: 5 calls/minute)
+    console.log('[Alpha Vantage] Waiting 13 seconds for rate limit...');
     await new Promise(resolve => setTimeout(resolve, 13000));
 
-    // Call 30-year second
     const thirtyYearData = await getTreasuryYield('30year');
-    console.log(`[Alpha Vantage] getAllTreasuryYields: 30-year result = ${JSON.stringify(thirtyYearData)}`);
+    console.log(`[Alpha Vantage] 30-year result = ${JSON.stringify(thirtyYearData)}`);
 
-    const result = {
+    const bothNull = !tenYearData && !thirtyYearData;
+
+    const result: TreasuryCacheEntry = {
         '10year': tenYearData ? tenYearData.value : null,
         '10yearChange': tenYearData ? tenYearData.change : 0,
         '10yearDate': tenYearData ? tenYearData.date : null,
         '30year': thirtyYearData ? thirtyYearData.value : null,
         '30yearChange': thirtyYearData ? thirtyYearData.change : 0,
-        '30yearDate': thirtyYearData ? thirtyYearData.date : null
+        '30yearDate': thirtyYearData ? thirtyYearData.date : null,
+        // Both null = likely rate-limited: set fetchedAt back so cache expires in 5min instead of 1h
+        fetchedAt: bothNull
+            ? Date.now() - (TREASURY_CACHE_TTL_MS - 5 * 60 * 1000)
+            : Date.now(),
     };
 
-    console.log('[Alpha Vantage] getAllTreasuryYields: Final result:', result);
+    treasuryCache = result;
+
+    if (bothNull) {
+        console.warn('[Alpha Vantage] Both yields null (rate limited?). Cache TTL shortened to 5 min.');
+    } else {
+        console.log('[Alpha Vantage] Cache updated. Next fetch in 1 hour.');
+    }
+    console.log('[Alpha Vantage] Final result:', result);
 
     return result;
 }
