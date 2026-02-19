@@ -78,13 +78,15 @@ export function OpportunityRadar() {
     const fetchOpportunities = async (force = false) => {
         setLoading(true);
         try {
-            // Add cache bust parameter for force refresh
+            // ?forceRefresh=true → server-side memory cache invalidation
+            // Without this, force=true only bypasses browser cache but server
+            // still returns the cached (possibly stale/error) response.
             const url = force
-                ? `/api/market-intelligence?_t=${Date.now()}`
+                ? `/api/market-intelligence?forceRefresh=true`
                 : '/api/market-intelligence';
 
             const res = await fetch(url, {
-                cache: force ? 'no-store' : 'default'
+                cache: 'no-store'  // Always bypass browser cache
             });
             const result = await res.json();
             setData(result);

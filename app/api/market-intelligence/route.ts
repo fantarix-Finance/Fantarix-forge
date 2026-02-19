@@ -107,12 +107,24 @@ async function getStockData(symbol: string): Promise<{
  * Market Intelligence API (Sector-Based, with memory cache)
  * Analyzes 11 GICS sectors using Finnhub, finds 3 weakest by 52-week position.
  * Results are cached 8 hours to stay within Vercel function timeout limits.
+ *
+ * Query params:
+ *   ?forceRefresh=true  → Bypasses server cache and runs fresh analysis
  */
 export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
+
+    // Force refresh: invalidate server-side memory cache
+    if (forceRefresh && intelligenceCache) {
+        console.log('[Market Intelligence] forceRefresh=true → Cache invalidated');
+        intelligenceCache = null;
+    }
+
     // ── Return cached data if still valid ─────────────────────────────────────
     if (isCacheValid()) {
         console.log('[Market Intelligence] Cache HIT – returning cached data');
-        return NextResponse.json(intelligenceCache!.data);
+        return NextResponse.json({ ...intelligenceCache!.data as object, cached: true });
     }
 
     // ── Cache MISS: run full analysis ─────────────────────────────────────────
